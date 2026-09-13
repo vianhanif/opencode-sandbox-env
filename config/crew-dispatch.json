@@ -1,0 +1,42 @@
+{
+  "rules": [
+    {
+      "when": "planning, design, or documentation task",
+      "use": [
+        { "harness": "opencode", "model": "General" }
+      ],
+      "why": "planner needs broad context, not deep reasoning"
+    },
+    {
+      "when": "coding, implementation, bug fix, or refactor",
+      "use": [
+        { "harness": "opencode", "model": "Balanced" }
+      ],
+      "why": "balanced coding speed and quality"
+    },
+    {
+      "when": "code review, diff analysis, or MR review",
+      "use": [
+        { "harness": "opencode", "model": "General" }
+      ],
+      "why": "review benefits from fast, broad context"
+    },
+    {
+      "when": "testing, verification, or QA",
+      "use": [
+        { "harness": "opencode", "model": "Balanced" }
+      ],
+      "why": "test scenarios need moderate reasoning"
+    },
+    {
+      "when": "investigation, root cause analysis, incident triage, or debugging",
+      "use": [
+        { "harness": "opencode", "model": "Deep-Thinker" }
+      ],
+      "why": "analysis demands deep reasoning"
+    }
+  ],
+  "default": [
+    { "harness": "opencode", "model": "Balanced" }
+  ]
+}
