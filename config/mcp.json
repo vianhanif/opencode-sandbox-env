@@ -2,7 +2,7 @@
   "mcpServers": {
     "9router-gateway": {
       "type": "remote",
-      "url": "${ROUTER9_GATEWAY_URL}",
+      "url": "http://9router-api:20127/api/mcp-gateway",
       "headers": {
         "Authorization": "Bearer ${ROUTER9_GATEWAY_KEY}"
       }

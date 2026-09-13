@@ -1,5 +1,15 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "9router-gateway": {
+      "type": "remote",
+      "url": "http://9router-api:20127/api/mcp-gateway",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:ROUTER9_GATEWAY_KEY}"
+      }
+    }
+  },
   "provider": {
     "9router": {
       "npm": "@ai-sdk/openai-compatible",
