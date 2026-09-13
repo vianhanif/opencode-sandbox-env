@@ -1,0 +1,21 @@
+# Secrets — never commit
+.env
+env/*.env
+!env/*.env.example
+config/.env
+!config/.env.example
+
+# Runtime state / volumes
+data/
+.worktrees/
+.deploy-env
+
+# Local overrides
+docker-compose.override.yml
+cloudflared/config.yml
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

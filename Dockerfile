@@ -66,6 +66,11 @@ RUN git clone --depth 50 https://github.com/kunchenguid/firstmate /home/opencode
 ENV PATH="/home/opencode/.firstmate/bin:${PATH}"
 ENV FM_HOME="/home/opencode/.firstmate"
 
+# Seed config for firstmate + opencode (copied at runtime only when missing)
+COPY --chown=opencode:opencode config/ /opt/opencode-seed/
+RUN mkdir -p /home/opencode/.config/opencode
+COPY --chown=opencode:opencode config/opencode.json /home/opencode/.config/opencode/opencode.json
+
 # Copy entrypoint
 COPY --chown=opencode:opencode scripts/entrypoint.sh /home/opencode/entrypoint.sh
 RUN chmod +x /home/opencode/entrypoint.sh

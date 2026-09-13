@@ -7,7 +7,7 @@ on:
     inputs:
       firstmate_ref:
         description: "Firstmate branch or SHA (build arg FIRSTMATE_REF)"
-        default: master
+        default: main
         required: false
   repository_dispatch:
     types: [ deploy ]
@@ -49,7 +49,7 @@ jobs:
             }
 
             FIRSTMATE_TARGET="${{ github.event.inputs.firstmate_ref }}"
-            FIRSTMATE_TARGET="${FIRSTMATE_TARGET:-master}"
+            FIRSTMATE_TARGET="${FIRSTMATE_TARGET:-main}"
 
             # Resolve the image name from compose instead of hardcoding it.
             IMAGE=$(docker compose -f docker-compose.yml -f docker-compose.vps.yml config --format json \
@@ -58,10 +58,17 @@ jobs:
             echo "IMAGE=$IMAGE" > .deploy-env
 
             resolve_sha() {
-              if [[ "$1" =~ ^[0-9a-f]{40}$ ]]; then
-                echo "$1"
+              local ref="$1"
+              if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "$ref"
               else
-                echo "$1"
+                local sha
+                sha=$(git ls-remote https://github.com/kunchenguid/firstmate "$ref" 2>/dev/null | awk '{print $1}')
+                if [[ -z "$sha" ]]; then
+                  echo "ERROR: cannot resolve firstmate ref '$ref'" >&2
+                  exit 1
+                fi
+                echo "$sha"
               fi
             }
             FIRSTMATE_SHA=$(resolve_sha "$FIRSTMATE_TARGET")
