@@ -1,0 +1,62 @@
+# OpenCode Sandbox — Compose Stack
+# ponytail: single container crew (tmux windows), add service scaling when needed
+
+name: opencode-sandbox
+
+services:
+  opencode:
+    build: .
+    container_name: opencode
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    env_file:
+      - env/opencode.env
+    ports:
+      - "127.0.0.1:${OPENCODE_PORT:-4096}:4096"
+    networks:
+      - opencode-net
+    volumes:
+      - ./data/projects:/home/opencode/projects
+      - ./data/data:/home/opencode/data
+      - ./data/state:/home/opencode/state
+      - ./data/config:/home/opencode/config
+      - ./data/scratchpad:/home/opencode/scratchpad
+      - ./data/sessions:/home/opencode/sessions
+      - ./data/ssh:/home/opencode/.ssh:ro
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    environment:
+      - OPENCODE_DOMAIN=${OPENCODE_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - opencode-net
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - opencode
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
+    networks:
+      - opencode-net
+    depends_on:
+      - caddy
+
+networks:
+  opencode-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

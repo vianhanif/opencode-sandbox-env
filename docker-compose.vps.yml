@@ -1,0 +1,15 @@
+# VPS override — attach to co-located 9router network
+# Usage: docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
+
+services:
+  opencode:
+    networks:
+      - opencode-net
+      - 9router-net
+    environment:
+      - ROUTER9_GATEWAY_URL=http://9router-api:20127
+
+networks:
+  9router-net:
+    name: 9router_9router-net
+    external: true
