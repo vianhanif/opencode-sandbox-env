@@ -9,6 +9,10 @@ for dir in projects data state config scratchpad sessions; do
     mkdir -p "$FM_HOME/$dir"
 done
 
+# Workspace dirs the web UI offers must exist, otherwise prompt_async fails
+# with "FileSystem.realPath ... ENOENT" and chat never responds.
+mkdir -p "$FM_HOME/projects" "$FM_HOME/work" "$FM_HOME/personal"
+
 # Ensure .ssh exists (even if volume not mounted); tolerate read-only mounts
 mkdir -p "$FM_HOME/.ssh" 2>/dev/null || true
 if [ -w "$FM_HOME/.ssh" ]; then

@@ -66,6 +66,8 @@ RUN git clone --depth 50 https://github.com/kunchenguid/firstmate /home/opencode
 # Add firstmate bin to PATH; FM_HOME = operational home (data/state/config/projects/scratchpad),
 # NOT the tracked code root (/home/opencode/.firstmate). See firstmate docs/configuration.md.
 ENV PATH="/home/opencode/.firstmate/bin:${PATH}"
+# Persist OpenCode state (session DB, history) into the mounted sessions volume
+ENV XDG_DATA_HOME="/home/opencode/sessions"
 ENV FM_HOME="/home/opencode"
 
 # Seed config for firstmate + opencode (copied at runtime only when missing)
