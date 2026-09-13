@@ -62,9 +62,10 @@ WORKDIR /home/opencode
 RUN git clone --depth 50 https://github.com/kunchenguid/firstmate /home/opencode/.firstmate \
     && cd /home/opencode/.firstmate && git checkout ${FIRSTMATE_REF}
 
-# Add firstmate bin to PATH
+# Add firstmate bin to PATH; FM_HOME = operational home (data/state/config/projects/scratchpad),
+# NOT the tracked code root (/home/opencode/.firstmate). See firstmate docs/configuration.md.
 ENV PATH="/home/opencode/.firstmate/bin:${PATH}"
-ENV FM_HOME="/home/opencode/.firstmate"
+ENV FM_HOME="/home/opencode"
 
 # Seed config for firstmate + opencode (copied at runtime only when missing)
 COPY --chown=opencode:opencode config/ /opt/opencode-seed/
