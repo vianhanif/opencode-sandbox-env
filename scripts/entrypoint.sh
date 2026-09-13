@@ -10,6 +10,10 @@ done
 mkdir -p /home/opencode/.ssh
 chmod 700 /home/opencode/.ssh
 
+# tmux needs TERM even in non-tty containers
+# ponytail: bind-mount host dirs must be owned by uid 1000 (chown on host before up)
+export TERM=xterm-256color
+
 # Create tmux session 'firstmate' if not exists
 # Runs the OpenCode TUI primary in the Firstmate checkout; crewmates are additional tmux windows
 if ! tmux has-session -t firstmate 2>/dev/null; then

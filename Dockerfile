@@ -8,8 +8,12 @@ FROM node:${NODE_VERSION}-bookworm-slim
 ARG OPENCODE_VERSION=1.18.30
 ARG FIRSTMATE_REF=b182d0f908b78d08c7ccb8dce3775bdca8c5d657
 
+# Rename existing node user/group to opencode (UID/GID 1000 preserved)
+RUN groupmod -n opencode node && usermod -l opencode -d /home/opencode -m node
+
 # System packages (dev tooling, CLIs)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    unzip \
     git \
     tmux \
     curl \
@@ -28,8 +32,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | g
     && apt-get update && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# GitLab CLI (glab)
-RUN curl -fsSL https://gitlab.com/gitlab-org/cli/-/releases/permalink/latest/downloads/glab_$(dpkg --print-architecture).deb -o /tmp/glab.deb \
+# GitLab CLI (glab) — version pinned
+ARG GLAB_VERSION=1.117.0
+RUN curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_$(dpkg --print-architecture).deb" -o /tmp/glab.deb \
     && dpkg -i /tmp/glab.deb && rm /tmp/glab.deb
 
 # AWS CLI v2
@@ -39,8 +44,8 @@ RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -
 # OpenCode CLI (version-pinned)
 RUN npm install -g opencode-ai@${OPENCODE_VERSION}
 
-# Create user opencode UID 1000
-RUN useradd -m -u 1000 -s /bin/bash opencode
+# Ensure opencode homedir and shell
+RUN chsh -s /bin/bash opencode
 
 # Volume mount points (owned by opencode)
 RUN mkdir -p /home/opencode/projects \
