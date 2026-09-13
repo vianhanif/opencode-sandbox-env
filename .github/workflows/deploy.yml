@@ -230,7 +230,7 @@ jobs:
 
             docker compose -f docker-compose.yml -f docker-compose.vps.yml ps
 
-            for c in opencode caddy cloudflared; do
+            for c in opencode opencode-caddy opencode-cloudflared; do
               test "$(docker inspect -f '{{.State.Running}}' $c)" = "true" || {
                 echo "ERROR: $c is not running"
                 docker logs --tail=100 "$c" || true

@@ -27,7 +27,9 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: caddy
+    # NOTE: 9router stack on the same VPS already owns bare 'caddy'/'cloudflared'
+    # container names, so ours must be prefixed.
+    container_name: opencode-caddy
     restart: unless-stopped
     environment:
       - OPENCODE_DOMAIN=${OPENCODE_DOMAIN}
@@ -45,7 +47,7 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: cloudflared
+    container_name: opencode-cloudflared
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
     networks:
