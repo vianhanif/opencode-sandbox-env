@@ -159,6 +159,11 @@ jobs:
             trap cleanup EXIT
 
             docker rm -f "$SMOKE" >/dev/null 2>&1 || true
+
+            # Mirror prod: bind dirs must be writable by uid 1000 for the entrypoint seed
+            mkdir -p data/{projects,data,state,config,scratchpad,sessions,ssh}
+            chown -R 1000:1000 data
+
             docker run -d --name "$SMOKE" $NETARG \
               --env-file ./env/opencode.env \
               -p ${SMOKE_PORT}:4096 \
@@ -199,6 +204,13 @@ jobs:
               exit 1
             }
 
+            echo "Checking firstmate config seeded..."
+            docker exec "$SMOKE" test -s /home/opencode/config/crew-harness || {
+              echo "ERROR: firstmate config not seeded (check data dir ownership)"
+              docker exec "$SMOKE" ls -lan /home/opencode/config || true
+              exit 1
+            }
+
             echo "Awaiting opencode web at ${WEB_URL}..."
             CODE=""
             for i in $(seq 1 20); do
@@ -229,6 +241,11 @@ jobs:
             cd /opt/opencode-sandbox
 
             docker rm -f smoke-opencode >/dev/null 2>&1 || true
+
+            # Bind-mounted data dirs must be writable by uid 1000 (container user)
+            echo "Ensuring data dirs owned by uid 1000..."
+            mkdir -p data/{projects,data,state,config,scratchpad,sessions,ssh}
+            chown -R 1000:1000 data
 
             echo "Starting production stack..."
             docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d \
