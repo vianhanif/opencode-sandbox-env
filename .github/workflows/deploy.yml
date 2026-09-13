@@ -1,0 +1,247 @@
+name: deploy
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      firstmate_ref:
+        description: "Firstmate branch or SHA (build arg FIRSTMATE_REF)"
+        default: master
+        required: false
+  repository_dispatch:
+    types: [ deploy ]
+
+concurrency:
+  group: deploy-opencode-sandbox
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync deploy files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.TENCENT_HOST }}
+          username: ${{ secrets.TENCENT_USER }}
+          key: ${{ secrets.TENCENT_SSH_KEY }}
+          source: "Dockerfile,docker-compose.yml,docker-compose.vps.yml,proxy/,config/,env/,scripts/,cloudflared/"
+          target: /opt/opencode-sandbox
+
+      - name: Build new image
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.TENCENT_HOST }}
+          username: ${{ secrets.TENCENT_USER }}
+          key: ${{ secrets.TENCENT_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /opt/opencode-sandbox
+
+            test -f env/opencode.env || {
+              echo "ERROR: env/opencode.env missing on VPS (provision once, never committed)"
+              exit 1
+            }
+
+            FIRSTMATE_TARGET="${{ github.event.inputs.firstmate_ref }}"
+            FIRSTMATE_TARGET="${FIRSTMATE_TARGET:-master}"
+
+            # Resolve the image name from compose instead of hardcoding it.
+            IMAGE=$(docker compose -f docker-compose.yml -f docker-compose.vps.yml config --format json \
+              | jq -r '.services.opencode.image // empty')
+            IMAGE="${IMAGE:-opencode-sandbox-opencode:latest}"
+            echo "IMAGE=$IMAGE" > .deploy-env
+
+            resolve_sha() {
+              if [[ "$1" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "$1"
+              else
+                echo "$1"
+              fi
+            }
+            FIRSTMATE_SHA=$(resolve_sha "$FIRSTMATE_TARGET")
+            echo "Building image=$IMAGE firstmate=$FIRSTMATE_SHA"
+
+            docker tag "$IMAGE" "${IMAGE%%:*}:prev" 2>/dev/null || true
+
+            docker compose -f docker-compose.yml -f docker-compose.vps.yml build \
+              --build-arg FIRSTMATE_REF=$FIRSTMATE_SHA \
+              opencode
+
+            docker image inspect "$IMAGE" >/dev/null
+
+      - name: Smoke test new image
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.TENCENT_HOST }}
+          username: ${{ secrets.TENCENT_USER }}
+          key: ${{ secrets.TENCENT_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /opt/opencode-sandbox
+            . ./.deploy-env
+
+            SMOKE=smoke-opencode
+            SMOKE_PORT=4097
+            LOCAL_HOST="127.0.0.1"
+            WEB_URL="http://${LOCAL_HOST}:${SMOKE_PORT}"
+
+            # Reuse the 9router network when present so the sandbox can reach 9router-api:20127.
+            NET=9router_9router-net
+            if docker network inspect "$NET" >/dev/null 2>&1; then
+              NETARG="--network $NET"
+            else
+              NETARG=""
+            fi
+
+            cleanup() {
+              echo "Cleaning up smoke container..."
+              docker rm -f "$SMOKE" >/dev/null 2>&1 || true
+            }
+            trap cleanup EXIT
+
+            docker rm -f "$SMOKE" >/dev/null 2>&1 || true
+            docker run -d --name "$SMOKE" $NETARG \
+              --env-file ./env/opencode.env \
+              -p ${SMOKE_PORT}:4096 \
+              "$IMAGE"
+
+            echo "Waiting for smoke container to boot..."
+            sleep 5
+
+            test "$(docker inspect -f '{{.State.Running}}' $SMOKE)" = "true" || {
+              echo "ERROR: smoke container is not running"
+              docker logs --tail=100 "$SMOKE" || true
+              exit 1
+            }
+
+            echo "Checking gh auth (GH_TOKEN)..."
+            docker exec "$SMOKE" gh auth status || {
+              echo "ERROR: gh auth status failed"
+              exit 1
+            }
+
+            echo "Checking tmux sessions..."
+            docker exec "$SMOKE" sh -c 'tmux ls || tmux has-session' || {
+              echo "ERROR: no tmux session/server in container"
+              exit 1
+            }
+
+            echo "Checking opencode web process..."
+            docker exec "$SMOKE" sh -c 'pgrep -f "opencode web" >/dev/null' || {
+              echo "ERROR: opencode web process not found"
+              docker logs --tail=100 "$SMOKE" || true
+              exit 1
+            }
+
+            echo "Awaiting opencode web at ${WEB_URL}..."
+            CODE=""
+            for i in $(seq 1 20); do
+              CODE=$(curl -s -o /dev/null -w '%{http_code}' "$WEB_URL" || true)
+              if [ "$CODE" = "200" ] || [ "$CODE" = "401" ]; then
+                break
+              fi
+              sleep 3
+            done
+
+            if [ "$CODE" != "200" ] && [ "$CODE" != "401" ]; then
+              echo "ERROR: opencode web smoke test failed (http_code=$CODE)"
+              docker logs --tail=100 "$SMOKE" || true
+              exit 1
+            fi
+
+            echo "SMOKE TEST PASSED (http_code=$CODE)"
+
+      - name: Switch to new image & verify
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.TENCENT_HOST }}
+          username: ${{ secrets.TENCENT_USER }}
+          key: ${{ secrets.TENCENT_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /opt/opencode-sandbox
+
+            docker rm -f smoke-opencode >/dev/null 2>&1 || true
+
+            echo "Starting production stack..."
+            docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d \
+              --remove-orphans \
+              --force-recreate
+
+            docker compose -f docker-compose.yml -f docker-compose.vps.yml ps
+
+            for c in opencode caddy cloudflared; do
+              test "$(docker inspect -f '{{.State.Running}}' $c)" = "true" || {
+                echo "ERROR: $c is not running"
+                docker logs --tail=100 "$c" || true
+                exit 1
+              }
+            done
+
+            echo "Waiting for production opencode web..."
+            CODE=""
+            for i in $(seq 1 20); do
+              CODE=$(docker exec opencode curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4096 || true)
+              if [ "$CODE" = "200" ] || [ "$CODE" = "401" ]; then
+                break
+              fi
+              sleep 3
+            done
+
+            if [ "$CODE" != "200" ] && [ "$CODE" != "401" ]; then
+              echo "ERROR: production opencode web health check failed (http_code=$CODE)"
+              docker logs --tail=100 opencode || true
+              exit 1
+            fi
+
+            echo "DEPLOY OK"
+
+      - name: Prune old images & build cache
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.TENCENT_HOST }}
+          username: ${{ secrets.TENCENT_USER }}
+          key: ${{ secrets.TENCENT_SSH_KEY }}
+          script: |
+            cd /opt/opencode-sandbox
+            if [ -f .deploy-env ]; then
+              . ./.deploy-env
+              docker rmi "${IMAGE%%:*}:prev" 2>/dev/null || true
+            fi
+            docker image prune -f
+            docker builder prune -af
+
+      - name: Rollback on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.TENCENT_HOST }}
+          username: ${{ secrets.TENCENT_USER }}
+          key: ${{ secrets.TENCENT_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /opt/opencode-sandbox
+            echo "Deployment failed — restoring previous image..."
+            docker rm -f smoke-opencode >/dev/null 2>&1 || true
+
+            if [ -f .deploy-env ]; then
+              . ./.deploy-env
+              PREV="${IMAGE%%:*}:prev"
+              if docker image inspect "$PREV" >/dev/null 2>&1; then
+                docker tag "$PREV" "$IMAGE"
+              fi
+            fi
+
+            docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d \
+              --remove-orphans --force-recreate || true
+            docker compose -f docker-compose.yml -f docker-compose.vps.yml ps
+            echo "ROLLBACK OK"
