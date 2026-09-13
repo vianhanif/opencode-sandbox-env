@@ -159,9 +159,16 @@ jobs:
             trap cleanup EXIT
 
             docker rm -f "$SMOKE" >/dev/null 2>&1 || true
-            docker run -d --name "$SMOKE" $NETARG \
-              --env-file ./env/opencode.env \
-              -p ${SMOKE_PORT}:4096 \
+            docker run -d --name "$SMOKE" $NETARG \\
+              --env-file ./env/opencode.env \\
+              -p ${SMOKE_PORT}:4096 \\
+              -v "$(pwd)/data/projects:/home/opencode/projects" \\
+              -v "$(pwd)/data/data:/home/opencode/data" \\
+              -v "$(pwd)/data/state:/home/opencode/state" \\
+              -v "$(pwd)/data/config:/home/opencode/config" \\
+              -v "$(pwd)/data/scratchpad:/home/opencode/scratchpad" \\
+              -v "$(pwd)/data/sessions:/home/opencode/sessions" \\
+              -v "$(pwd)/data/ssh:/home/opencode/.ssh:ro" \\
               "$IMAGE"
 
             echo "Waiting for smoke container to boot..."

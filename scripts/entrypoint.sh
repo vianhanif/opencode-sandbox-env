@@ -9,9 +9,11 @@ for dir in projects data state config scratchpad sessions; do
     mkdir -p "$FM_HOME/$dir"
 done
 
-# Ensure .ssh exists (even if volume not mounted)
-mkdir -p "$FM_HOME/.ssh"
-chmod 700 "$FM_HOME/.ssh"
+# Ensure .ssh exists (even if volume not mounted); tolerate read-only mounts
+mkdir -p "$FM_HOME/.ssh" 2>/dev/null || true
+if [ -w "$FM_HOME/.ssh" ]; then
+    chmod 700 "$FM_HOME/.ssh"
+fi
 
 # Seed firstmate config on first boot — only if missing so later manual edits win
 if [[ -d "$SEED_DIR" ]]; then
