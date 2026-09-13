@@ -5,17 +5,18 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "9Router (local)",
       "options": {
-        "baseURL": "http://9router-api:20127/v1"
+        "baseURL": "http://9router-api:20127/v1",
+        "apiKey": "{env:ROUTER9_API_KEY}"
       },
       "models": {
         "General": {
-          "name": "General (balanced, fast)"
+          "name": "General (9router combo)"
         },
         "Balanced": {
-          "name": "Balanced (coding, moderate reasoning)"
+          "name": "Balanced (9router combo)"
         },
         "Deep-Thinker": {
-          "name": "Deep-Thinker (analysis, deep reasoning)"
+          "name": "Deep-Thinker (9router combo)"
         }
       }
     }
