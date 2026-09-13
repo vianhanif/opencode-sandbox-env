@@ -1,0 +1,7 @@
+http://{$OPENCODE_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy opencode:4096 {
+		flush_interval -1
+	}
+}
