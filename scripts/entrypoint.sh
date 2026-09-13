@@ -27,6 +27,13 @@ fi
 # ponytail: bind-mount host dirs must be owned by uid 1000 (chown on host before up)
 export TERM=xterm-256color
 
+# Make firstmate's AGENTS.md the global OpenCode rules so every session
+# (web + TUI) sees them regardless of working directory.
+if [[ -f "$FM_HOME/.firstmate/AGENTS.md" ]]; then
+    mkdir -p "$FM_HOME/.config/opencode"
+    cp "$FM_HOME/.firstmate/AGENTS.md" "$FM_HOME/.config/opencode/AGENTS.md"
+fi
+
 # Create tmux session 'firstmate' if not exists
 # Runs the OpenCode TUI primary in the Firstmate checkout; crewmates are additional tmux windows
 if ! tmux has-session -t firstmate 2>/dev/null; then
