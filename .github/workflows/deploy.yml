@@ -288,12 +288,22 @@ jobs:
           key: ${{ secrets.TENCENT_SSH_KEY }}
           script: |
             cd /opt/opencode-sandbox
+            PROJECT=opencode-sandbox
             if [ -f .deploy-env ]; then
               . ./.deploy-env
+              # Scoped to this project's own image ref — safe on a shared daemon.
               docker rmi "${IMAGE%%:*}:prev" 2>/dev/null || true
             fi
-            docker image prune -f
-            docker builder prune -af
+            # Scope image cleanup to this compose project (label filter) and keep
+            # a 24h age floor so a concurrent build's fresh dangling layers (e.g.
+            # the co-located 9router stack) are never collected here.
+            docker image prune -f \
+              --filter "label=com.docker.compose.project=$PROJECT" \
+              --filter "until=24h"
+            # NEVER `docker builder prune -af` on a shared VPS: it wipes the
+            # BuildKit cache of every project on the daemon. Only drop cache
+            # older than 7 days instead.
+            docker builder prune -f --filter "until=168h"
 
       - name: Rollback on failure
         if: failure()
@@ -309,15 +319,34 @@ jobs:
             echo "Deployment failed — restoring previous image..."
             docker rm -f smoke-opencode >/dev/null 2>&1 || true
 
-            if [ -f .deploy-env ]; then
-              . ./.deploy-env
-              PREV="${IMAGE%%:*}:prev"
-              if docker image inspect "$PREV" >/dev/null 2>&1; then
-                docker tag "$PREV" "$IMAGE"
-              fi
+            # Failure before the build step produced a new image — production is
+            # untouched, so don't needlessly recreate (and blip the ingress).
+            if [ ! -f .deploy-env ]; then
+              echo "No .deploy-env — failure before build; production left as-is."
+              exit 0
+            fi
+            . ./.deploy-env
+
+            PREV="${IMAGE%%:*}:prev"
+            CUR_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null || true)
+            PREV_ID=$(docker image inspect "$PREV" --format '{{.Id}}' 2>/dev/null || true)
+            NEED_RECREATE=0
+
+            if [ -n "$PREV_ID" ] && [ "$CUR_ID" != "$PREV_ID" ]; then
+              echo "Restoring $PREV -> $IMAGE"
+              docker tag "$PREV" "$IMAGE"
+              NEED_RECREATE=1
             fi
 
-            docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d \
-              --remove-orphans --force-recreate || true
-            docker compose -f docker-compose.yml -f docker-compose.vps.yml ps
-            echo "ROLLBACK OK"
+            if [ "$NEED_RECREATE" = "1" ]; then
+              docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d \
+                --remove-orphans --force-recreate || {
+                  echo "ERROR: rollback recreate failed"
+                  docker compose -f docker-compose.yml -f docker-compose.vps.yml ps || true
+                  exit 1
+                }
+              docker compose -f docker-compose.yml -f docker-compose.vps.yml ps
+              echo "ROLLBACK OK"
+            else
+              echo "Production already on the previous image; nothing to roll back."
+            fi
